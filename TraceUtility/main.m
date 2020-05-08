@@ -40,29 +40,32 @@ int main(int argc, const char * argv[]) {
 
         // Open a trace document.
         NSArray<NSString *> *arguments = NSProcessInfo.processInfo.arguments;
-        if (arguments.count < 2) {
+        if (arguments.count < 3) {
             TUPrint(@"Usage: %@ [%@]\n", arguments.firstObject.lastPathComponent, @"trace document");
+            TUPrint(@"Usage: %@ [%@]\n", arguments.firstObject.lastPathComponent, @"process name");
             return 1;
         }
         NSString *tracePath = arguments[1];
+        NSString *processName = arguments[2];
+        
         NSError *error = nil;
         PFTTraceDocument *document = [[PFTTraceDocument alloc]initWithContentsOfURL:[NSURL fileURLWithPath:tracePath] ofType:@"com.apple.instruments.trace" error:&error];
         if (error) {
             TUPrint(@"Error: %@\n", error);
             return 1;
         }
-        TUPrint(@"Trace: %@\n", tracePath);
+        //TUPrint(@"Trace: %@\n", tracePath);
 
         // List some useful metadata of the document.
-        XRDevice *device = document.targetDevice;
-        TUPrint(@"Device: %@ (%@ %@ %@)\n", device.deviceDisplayName, device.productType, device.productVersion, device.buildVersion);
-        PFTProcess *process = document.defaultProcess;
-        TUPrint(@"Process: %@ (%@)\n", process.displayName, process.bundleIdentifier);
+        //XRDevice *device = document.targetDevice;
+        //TUPrint(@"Device: %@ (%@ %@ %@)\n", device.deviceDisplayName, device.productType, device.productVersion, device.buildVersion);
+        //PFTProcess *process = document.defaultProcess;
+        //TUPrint(@"Process: %@ (%@)\n", process.displayName, process.bundleIdentifier);
 
         // Each trace document consists of data from several different instruments.
         XRTrace *trace = document.trace;
         for (XRInstrument *instrument in trace.allInstrumentsList.allInstruments) {
-            TUPrint(@"\nInstrument: %@ (%@)\n", instrument.type.name, instrument.type.uuid);
+            //TUPrint(@"\nInstrument: %@ (%@)\n", instrument.type.name, instrument.type.uuid);
 
             // Each instrument can have multiple runs.
             NSArray<XRRun *> *runs = instrument.allRuns;
@@ -71,7 +74,7 @@ int main(int argc, const char * argv[]) {
                 continue;
             }
             for (XRRun *run in runs) {
-                TUPrint(@"Run #%@: %@\n", @(run.runNumber), run.displayName);
+                //TUPrint(@"Run #%@: %@\n", @(run.runNumber), run.displayName);
                 instrument.currentRun = run;
 
                 // Common routine to obtain contexts for the instrument.
@@ -190,6 +193,8 @@ int main(int argc, const char * argv[]) {
                     }];
                 } else if ([instrumentID isEqualToString:@"com.apple.xray.instrument-type.activity"]) {
                     // Activity Monitor
+                    int pid_column = 4;
+                    int process_column = 2;
                     XRContext *context = contexts[0];
                     [context display];
                     XRAnalysisCoreTableViewController *controller = TUIvar(context.container, _tabularViewController);
@@ -205,12 +210,25 @@ int main(int argc, const char * argv[]) {
                                     BOOL result = NO;
                                     XRAnalysisCoreValue *object = nil;
                                     NSMutableString *string = [NSMutableString string];
-                                    for (SInt64 column = 0; column < columnCount; column++) {
-                                        result = XRAnalysisCoreReadCursorGetValue(cursor, column, &object);
-                                        [string appendString:result ? [formatter stringForObjectValue:object] : @""];
-                                        [string appendFormat:@", "];
+                                    // updated by ben to parse pid
+                                    result = XRAnalysisCoreReadCursorGetValue(cursor, pid_column, &object);
+                                    NSString *pid = result ? [formatter stringForObjectValue:object] : @"";
+                                    result = NO;
+                                    result = XRAnalysisCoreReadCursorGetValue(cursor, process_column, &object);
+                                    NSString *cur_process = result ? [formatter stringForObjectValue:object] : @"";
+                                    result = NO;
+                                    
+                                    NSString *tar_process=[NSString stringWithFormat:@"%@ (%@)",processName,pid];
+                                    if ([tar_process isEqualToString:cur_process]) {
+                                        
+                                        for (SInt64 column = 0; column < columnCount; column++) {
+                                            result = XRAnalysisCoreReadCursorGetValue(cursor, column, &object);
+                                            [string appendString:result ? [formatter stringForObjectValue:object] : @""];
+                                            [string appendFormat:@", "];
+                                        }
+                                        TUPrint(@"%@", string);
                                     }
-                                    TUPrint(@"%@", string);
+                                    //updated end by ben
                                 }
                             }];
                         }];
